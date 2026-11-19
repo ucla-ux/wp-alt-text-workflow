@@ -4,8 +4,8 @@ What came out of one run of this workflow on the rehearsal site: 26 images with 
 
 | File | What it is |
 |---|---|
-| `alt-results.1-claude-draft.csv` | Exactly what `alt-generate.py` wrote (`claude-sonnet-5-5`, Message Batches API) |
-| `alt-results.2-after-review.csv` | The same file after a person read every row and edited five |
+| `alt-draft.csv` | Exactly what `alt-generate.py` wrote (`claude-sonnet-5-5`, Message Batches API) |
+| `alt-reviewed.csv` | The same file after a person read every row and edited five |
 
 Columns: `id, alt, route, needs_human, note, context, model`. See the main README for what they mean.
 
@@ -30,6 +30,6 @@ The miss in row 86 comes from the audit, not the model: images are sorted by fil
 
 ## What happens next
 
-`alt-apply.php` writes the 21 ready rows into the Media Library and leaves the 5 `needs_human` rows for a person. See the main README, step 6.
+`alt-import.php` writes the 21 ready rows into the Media Library and leaves the 5 `needs_human` rows for a person. See [`alt-import`](../../step-4-alt-import/).
 
 The images in this run are the presenter's own photos and a few synthetic test images.

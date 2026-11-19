@@ -4,10 +4,15 @@ Generate alt text for Media Library images that have none.
 
 WHY THIS EXISTS
 ---------------
-alt-audit.php produces tmp/alt-manifest.json: every image with an empty
-`_wp_attachment_image_alt`, the path to its 600px rendition, and what the page
-it lives on is about. This script turns that into tmp/alt-results.csv, which
-alt-apply.php writes back into the Media Library.
+alt-find.php writes step-2-alt-find/reports/missing-alt.json (and .csv): every image with an
+empty `_wp_attachment_image_alt`, the path to a mid-size rendition, and what the
+page it lives on is about. This script turns that into step-3-alt-generate/reports/alt-draft.csv.
+A person reviews it, saves it as step-3-alt-generate/reports/alt-reviewed.csv, and alt-import.php
+writes it into the Media Library.
+
+BEFORE-STEP REVIEW: if step-2-alt-find/reports/missing-alt.csv exists, it is the send list.
+Delete a row to leave that image out. Change a row's `route` (for example photo
+to infographic) to change how Claude is asked. Edit nothing and everything goes.
 
 DESIGN NOTES
 ------------
@@ -21,10 +26,11 @@ DESIGN NOTES
   gate and the remaining ~950 are the same command run twice.
 
 USAGE (run from the WordPress project root, on the host, not in the container)
+  one time: python3 -m venv ~/.venvs/alt-text && ~/.venvs/alt-text/bin/pip install anthropic
   export ANTHROPIC_API_KEY=...                       # never commit this
-  python3 bin/alt-text/alt-generate.py --site "a university research institute" --limit 50   # review gate
-  python3 bin/alt-text/alt-generate.py --site "..."  # everything still missing
-  python3 bin/alt-text/alt-generate.py --dry-run     # build prompts, send nothing
+  ~/.venvs/alt-text/bin/python bin/wp-alt-text-workflow/step-3-alt-generate/alt-generate.py --dry-run                 # build prompts, send nothing
+  ~/.venvs/alt-text/bin/python bin/wp-alt-text-workflow/step-3-alt-generate/alt-generate.py --site "a research institute" --limit 10
+  ~/.venvs/alt-text/bin/python bin/wp-alt-text-workflow/step-3-alt-generate/alt-generate.py --site "..."              # everything still missing
 """
 
 import argparse
@@ -37,19 +43,23 @@ import re
 import sys
 import time
 
-MODEL = "claude-opus-5-5"
+MODEL = "claude-sonnet-5-5"  # tested; use --model claude-opus-5-5 to compare
 MAX_LEN = 150
 CHUNK = 250  # requests per batch submission, keeps payload well under 256MB
 
-MANIFEST = "tmp/alt-manifest.json"
+HERE = os.path.dirname(os.path.abspath(__file__))
+FIND = os.path.normpath(os.path.join(HERE, "..", "step-2-alt-find", "reports"))  # written by step 2
+OUT = os.path.join(HERE, "reports")  # this step's own reports folder
+MANIFEST = f"{FIND}/missing-alt.json"
+SEND_LIST = f"{FIND}/missing-alt.csv"  # optional: a person's edits to the list
 # The manifest is written inside the DDEV container; image paths in it are
 # relative to the uploads basedir so they resolve on the host too.
 UPLOADS_ROOT = "wp-content/uploads"
-RESULTS = "tmp/alt-results.csv"
-HUMAN = "tmp/alt-needs-human.csv"
-RAW = "tmp/alt-raw.jsonl"
+RESULTS = f"{OUT}/alt-draft.csv"
+RAW = f"{OUT}/raw.jsonl"
 
 SEND_ROUTES = {"photo", "person", "logo", "infographic"}
+ROUTES = SEND_ROUTES | {"skip_svg", "no_file", "no_context"}
 
 DEFAULT_SITE = "a website"
 
@@ -234,21 +244,31 @@ def main():
     args = ap.parse_args()
 
     system_prompt = SYSTEM_TEMPLATE.format(site=args.site)
+    if not os.path.exists(MANIFEST):
+        sys.exit(f"{os.path.relpath(MANIFEST)} not found. Run this from the site folder, after alt-find.")
     manifest = json.load(open(MANIFEST, encoding="utf-8"))
 
-    # Route the ones that never go to the API into the human queue.
-    human = [i for i in manifest if i["route"] not in SEND_ROUTES]
-    with open(HUMAN, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["id", "route", "title", "filename", "reason"])
-        reasons = {
-            "skip_svg": "SVG - vision API cannot read it",
-            "no_context": "no page references this image; nothing to describe it against",
-            "no_file": "no image file on disk",
-        }
-        for i in human:
-            w.writerow([i["id"], i["route"], i["title"], i["filename"], reasons.get(i["route"], i["route"])])
-    print(f"{len(human)} images written to {HUMAN} (never sent to the API)")
+    # Apply the person's edits to the send list, if there is one.
+    if os.path.exists(SEND_LIST):
+        with open(SEND_LIST, newline="", encoding="utf-8") as f:
+            listed = {int(r["id"]): (r.get("route") or "").strip() for r in csv.DictReader(f)}
+        bad = {v for v in listed.values() if v and v not in ROUTES}
+        if bad:
+            sys.exit(f"{os.path.relpath(SEND_LIST)}: unknown route {sorted(bad)}. Use one of {sorted(ROUTES)}")
+        kept = []
+        for i in manifest:
+            if i["id"] in listed:
+                if listed[i["id"]]:
+                    i["route"] = listed[i["id"]]
+                kept.append(i)
+        print(f"{os.path.relpath(SEND_LIST)}: {len(kept)} of {len(manifest)} images kept")
+        manifest = kept
+    else:
+        print(f"No {os.path.relpath(SEND_LIST)}; using every image in {os.path.relpath(MANIFEST)}")
+
+    # Some routes never go to the API: SVG, missing file, no page uses the image.
+    held = [i for i in manifest if i["route"] not in SEND_ROUTES]
+    print(f"{len(held)} images never sent ({', '.join(sorted({i['route'] for i in held})) or 'none'}): write those by hand")
 
     done = load_done()
     pending = [i for i in manifest if i["route"] in SEND_ROUTES and i["id"] not in done]
@@ -273,11 +293,18 @@ def main():
 
     client = Anthropic()
 
+    os.makedirs(OUT, exist_ok=True)
+    columns = ["id", "alt", "route", "needs_human", "note", "context",
+               "filename", "edit_url", "file_url", "model"]
     new_csv = not os.path.exists(RESULTS)
+    if not new_csv:
+        # Keep an older draft's columns, so new rows line up with its header.
+        with open(RESULTS, newline="", encoding="utf-8") as f:
+            columns = next(csv.reader(f), columns) or columns
     out = open(RESULTS, "a", newline="", encoding="utf-8")
-    writer = csv.writer(out)
+    writer = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
     if new_csv:
-        writer.writerow(["id", "alt", "route", "needs_human", "note", "context", "model"])
+        writer.writeheader()
     raw = open(RAW, "a", encoding="utf-8")
 
     by_id = {i["id"]: i for i in pending}
@@ -357,8 +384,15 @@ def main():
                 totals["ok"] += 1
 
             ctx = item.get("context") or {}
-            writer.writerow([att_id, alt, item["route"], 1 if needs_human else 0, note,
-                             f"{ctx.get('type','')}: {ctx.get('title','')}", args.model])
+            writer.writerow({
+                "id": att_id, "alt": alt, "route": item["route"],
+                "needs_human": 1 if needs_human else 0, "note": note,
+                "context": f"{ctx.get('type','')}: {ctx.get('title','')}",
+                "filename": item.get("filename", ""),
+                "edit_url": item.get("edit_url", ""),   # open the image in the Media Library
+                "file_url": item.get("file_url", ""),   # the image itself
+                "model": args.model,
+            })
         out.flush()
         raw.flush()
 
@@ -373,7 +407,7 @@ def main():
     print(f"\nclean: {totals['ok']}   flagged for review: {totals['flagged']}   failed: {totals['failed']}")
     print(f"tokens: {totals['in']:,} in / {totals['out']:,} out")
     print(f"cost this run (batch pricing): ${cost:.2f}")
-    print(f"wrote {RESULTS}")
+    print(f"wrote {os.path.relpath(RESULTS)}")
 
 
 if __name__ == "__main__":

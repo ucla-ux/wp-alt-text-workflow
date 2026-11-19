@@ -4,7 +4,8 @@
  *
  * WHY THIS EXISTS
  * ---------------
- * alt-generate.py produces tmp/alt-results.csv. This puts it in the database --
+ * alt-generate.py writes step-3-alt-generate/reports/alt-draft.csv; a person reviews it and saves
+ * step-3-alt-generate/reports/alt-reviewed.csv. This puts the reviewed file in the database --
  * on a local test copy first, and, once reviewed, on staging and production,
  * where it is run by hand against the same CSV.
  *
@@ -17,19 +18,19 @@
  * - Skips any row flagged needs_human=1.
  * - Rejects rows over 150 characters rather than truncating them.
  * - Idempotent: a second run finds nothing to do.
- * - Records every ID it touched in tmp/alt-rollback-<timestamp>.json.
+ * - Records every ID it touched in step-4-alt-import/reports/alt-rollback-<timestamp>.json.
  *
  * USAGE
- *   wp eval-file bin/alt-text/alt-apply.php tmp/alt-results.csv            # dry run
- *   wp eval-file bin/alt-text/alt-apply.php tmp/alt-results.csv execute    # apply
- *   (prefix with `ddev` locally)
+ *   ddev wp eval-file bin/wp-alt-text-workflow/step-4-alt-import/alt-import.php bin/wp-alt-text-workflow/step-3-alt-generate/reports/alt-reviewed.csv            # dry run
+ *   ddev wp eval-file bin/wp-alt-text-workflow/step-4-alt-import/alt-import.php bin/wp-alt-text-workflow/step-3-alt-generate/reports/alt-reviewed.csv execute    # apply
+ *   (without DDEV: drop `ddev`)
  */
 
 $csv_path = isset($args[0]) ? $args[0] : '';
 $mode     = isset($args[1]) ? strtolower(trim($args[1])) : 'dry';
 
 if ('' === $csv_path) {
-	WP_CLI::error('Usage: wp eval-file bin/alt-text/alt-apply.php <csv-path> [execute]');
+	WP_CLI::error('Usage: ddev wp eval-file bin/wp-alt-text-workflow/step-4-alt-import/alt-import.php <csv-path> [execute]');
 }
 if (! file_exists($csv_path)) {
 	WP_CLI::error("CSV not found: {$csv_path}");
@@ -100,7 +101,11 @@ fclose($fh);
 $written = 0;
 if ('execute' === $mode && $plan) {
 	$stamp    = gmdate('Ymd-His');
-	$rollback = dirname($csv_path) . "/alt-rollback-{$stamp}.json";
+	$rollback_dir = __DIR__ . '/reports';
+	if (! is_dir($rollback_dir) && ! wp_mkdir_p($rollback_dir)) {
+		WP_CLI::error("Cannot create {$rollback_dir}");
+	}
+	$rollback = "{$rollback_dir}/alt-rollback-{$stamp}.json";
 	file_put_contents($rollback, wp_json_encode(array(
 		'written_at'  => gmdate('c'),
 		'source_csv'  => $csv_path,
@@ -111,7 +116,7 @@ if ('execute' === $mode && $plan) {
 		update_post_meta($id, '_wp_attachment_image_alt', $alt);
 		$written++;
 	}
-	WP_CLI::log("Rollback list: {$rollback}");
+	WP_CLI::log("Rollback list: " . str_replace(rtrim(getcwd(), '/') . '/', '', $rollback));
 }
 
 echo "\n";

@@ -12,7 +12,7 @@
  *   - 1 chart                               -> route "infographic"
  *   - 1 photo with alt an editor wrote      -> must never be overwritten
  *   - 1 linked image in a published post whose block markup has alt=""
- *     (the case alt-to-blocks.php exists for)
+ *     (the case alt-fix-pages.php exists for)
  *
  * Never run this on a real site. It refuses unless the site URL ends .ddev.site.
  */
@@ -102,4 +102,4 @@ wp_insert_post( array(
 		. "<figure class=\"wp-block-image size-medium\"><a href=\"https://example.test/event\"><img src=\"{$src}\" alt=\"\" class=\"wp-image-{$linked_id}\"/></a></figure>\n<!-- /wp:image -->",
 ) );
 
-WP_CLI::success( 'Seeded. Run alt-audit.php next.' );
+WP_CLI::success( 'Seeded. Run alt-find next.' );

@@ -11,15 +11,14 @@ ddev start
 ddev wp core download
 ddev wp core install --url=https://alt-rehearsal.ddev.site --title="Alt Rehearsal" \
   --admin_user=admin --admin_password=choose-a-password --admin_email=you@example.test --skip-email
-mkdir -p tmp bin
-cp -R /path/to/wp-alt-text-workflow/scripts bin/alt-text
+mkdir -p bin
 cp -R /path/to/wp-alt-text-workflow/rehearsal bin/rehearsal
 ddev wp eval-file bin/rehearsal/seed-test-site.php
 ```
 
 (`ddev config` writes `wp-config.php` for you, so you do not need `wp config create`.)
 
-You have already copied the scripts in. Now do the Python package and API key part of the main README's **Setup (once)**, then continue from **Step 1**. Expected audit result:
+Now follow the main README: **Set up a site (once)**, then Step 2. Expected Step 2 (`alt-find`) result:
 
 | Route | Count |
 |---|---|
@@ -28,11 +27,11 @@ You have already copied the scripts in. Now do the Python package and API key pa
 | logo | 1 |
 | infographic | 1 |
 
-Seven images exist (six with no alt, shown above); one already has alt written by an "editor", and `alt-apply.php` must leave it alone. One post holds a linked image saved with `alt=""`, which Step 7 fixes.
+Seven images exist (six with no alt, shown above); one already has alt written by an "editor", and `alt-import.php` must leave it alone. One post holds a linked image saved with `alt=""`, which `alt-fix-pages.php` fixes.
 
 ## See alt text in the Media Library (optional)
 
-WordPress does not show alt text in the Media Library list. `alt-column.php` adds an **Alt text** column that shows **missing** in red when it is empty, so you can see the before and after of `alt-apply.php`.
+WordPress does not show alt text in the Media Library list. `alt-column.php` adds an **Alt text** column that shows **missing** in red when it is empty, so you can see the before and after of `alt-import.php`.
 
 ```bash
 mkdir -p wp-content/mu-plugins
@@ -43,7 +42,7 @@ No activation needed. Open **Media → Library** in list view (the table icon), 
 
 ## Add your own photos (optional)
 
-`seed-posts.sh` makes one post per photo, attaches the photo, and shows it in the post, with no alt text. Put photos in a folder inside the project and name them descriptively; the file name becomes the post title, which is the context Claude sees. Avoid names with `logo`, `avatar`, `chart` or `diagram` unless you want that route (the audit reads file names).
+`seed-posts.sh` makes one post per photo, attaches the photo, and shows it in the post, with no alt text. Put photos in a folder inside the project and name them descriptively; the file name becomes the post title, which is the context Claude sees. Avoid names with `logo`, `avatar`, `chart` or `diagram` unless you want that route (`alt-find` reads file names).
 
 ```bash
 cp bin/rehearsal/seed-posts.sh bin/rehearsal/   # already there if you copied the folder

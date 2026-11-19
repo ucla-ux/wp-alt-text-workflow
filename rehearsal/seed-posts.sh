@@ -70,4 +70,4 @@ for f in "$DIR"/*.jpg "$DIR"/*.jpeg "$DIR"/*.png "$DIR"/*.webp; do
 done
 
 echo
-echo "Created $count posts. Next: ddev wp eval-file bin/alt-text/alt-audit.php"
+echo "Created $count posts. Next: ddev wp eval-file bin/wp-alt-text-workflow/step-2-alt-find/alt-find.php (see the repo README)"

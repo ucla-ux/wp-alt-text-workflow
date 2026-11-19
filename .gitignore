@@ -5,3 +5,5 @@ __pycache__/
 # Never commit keys or generated data
 .env
 tmp/
+reports/
+.venv/

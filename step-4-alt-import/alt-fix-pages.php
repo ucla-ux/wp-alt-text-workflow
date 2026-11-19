@@ -8,7 +8,7 @@
  *
  * The core/image and core/gallery blocks freeze `alt` into post_content when
  * the editor saves. An image inserted before anyone wrote alt text is stored as
- * `alt=""` forever. Running alt-apply.php later fills
+ * `alt=""` forever. Running alt-import.php later fills
  * `_wp_attachment_image_alt` in the Media Library, and every FUTURE insert of
  * that attachment picks it up — but the already-saved markup keeps its empty
  * copy, and that is what the page serves.
@@ -42,9 +42,9 @@
  *   published content, which nothing else in this folder does.
  *
  * USAGE
- *   wp eval-file bin/alt-text/alt-to-blocks.php            # dry run
- *   wp eval-file bin/alt-text/alt-to-blocks.php execute    # apply
- *   (prefix with `ddev` locally)
+ *   ddev wp eval-file bin/wp-alt-text-workflow/step-4-alt-import/alt-fix-pages.php            # dry run
+ *   ddev wp eval-file bin/wp-alt-text-workflow/step-4-alt-import/alt-fix-pages.php execute    # apply
+ *   (without DDEV: drop `ddev`)
  */
 
 $mode = isset($args[0]) ? strtolower(trim($args[0])) : 'dry';
@@ -189,8 +189,8 @@ if ($mode === 'execute') {
 	WP_CLI::success('Dry run only. Re-run with `execute` to apply.');
 	if ($skipped_no_lib > 0) {
 		WP_CLI::log(sprintf(
-			'%d linked image(s) have no alt anywhere. Run alt-audit.php and the '
-			. 'alt-generate/alt-apply pipeline first, then re-run this.',
+			'%d linked image(s) have no alt anywhere. Run the alt-find, '
+			. 'alt-generate and alt-import steps first, then re-run this.',
 			$skipped_no_lib
 		));
 	}

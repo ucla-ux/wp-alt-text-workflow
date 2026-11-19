@@ -1,5 +1,0 @@
-id,alt,route,needs_human,note,context,model
-101,Researchers collect soil samples in a dry streambed.,photo,0,,post: Soil carbon study,claude-opus-5-5
-102,Ada Lovelace,person,0,,person: Ada Lovelace,claude-opus-5-5
-103,Acme Foundation logo,logo,0,,page: Partners,claude-opus-5-5
-104,Bar chart of annual rainfall by region,infographic,1,An infographic needs a long description that a person has to write.,post: Rainfall report,claude-opus-5-5
